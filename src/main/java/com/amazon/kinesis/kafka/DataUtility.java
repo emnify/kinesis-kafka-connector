@@ -8,9 +8,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 import com.amazonaws.services.kinesisfirehose.model.Record;
-import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
@@ -26,8 +25,9 @@ public class DataUtility {
 	 *            - Value of the message
 	 * @return Parsed bytebuffer as per schema type
 	 */
-	public static ByteBuffer parseValue(Schema schema, Object value) {
+	public static ByteBuffer parseValue(Schema schema, Object rawValue) {
 		Schema.Type t = schema.type();
+		Object value = toPrimitiveValue(schema, rawValue);
 		switch (t) {
 		case INT8:
 			ByteBuffer byteBuffer = ByteBuffer.allocate(1);
@@ -102,6 +102,25 @@ public class DataUtility {
 
 		}
 		return null;
+	}
+
+	private static Object toPrimitiveValue(Schema schema, Object value) {
+    	String schemaName = schema.name();
+    	Object defaultValue = schema.defaultValue();
+    	if (schemaName == null) {
+    		return value;
+		}
+    	switch (schemaName) {
+			case Date.LOGICAL_NAME:
+			case Time.LOGICAL_NAME:
+			case Timestamp.LOGICAL_NAME:
+				java.util.Date dateValue = (java.util.Date)(value == null ? defaultValue : value);
+				return dateValue.getTime();
+			case Decimal.LOGICAL_NAME:
+			    return (double)value;
+			default:
+				return null;
+		}
 	}
 
 	/**
