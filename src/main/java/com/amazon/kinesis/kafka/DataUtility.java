@@ -119,7 +119,8 @@ public class DataUtility {
 			case Decimal.LOGICAL_NAME:
 			    return (double)value;
 			default:
-				return null;
+				// return value by default. Schema name can have various names
+				return value;
 		}
 	}
 
