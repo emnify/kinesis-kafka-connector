@@ -168,7 +168,10 @@ public class AmazonKinesisSinkTask extends SinkTask {
             } catch (InterruptedException e) {
                 throw new ConnectException("Interrupted waiting for first result", e);
             }
-            submittedFutures.stream().filter(f -> f.isDone()).findAny().get().get();
+            Optional<Future> waitingFuture = submittedFutures.stream().filter(f -> f.isDone()).findAny();
+            if (waitingFuture.isPresent()) {
+                waitingFuture.get().get();
+            }
         } catch (ExecutionException|InterruptedException ex) {
             throw new ConnectException("Producer failed" + ex.getMessage(), ex);
         }
