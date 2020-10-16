@@ -83,24 +83,6 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
     private static final Logger log = LoggerFactory.getLogger(AmazonKinesisSinkTask.class);
 
-    final FutureCallback<UserRecordResult> callback = new FutureCallback<UserRecordResult>() {
-        @Override
-        public void onFailure(Throwable t) {
-            if (t instanceof UserRecordFailedException) {
-                Attempt last = Iterables.getLast(((UserRecordFailedException) t).getResult().getAttempts());
-                throw new DataException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
-                        + last.getErrorMessage());
-
-            }
-            throw new DataException("Exception during Kinesis put", t);
-        }
-
-        @Override
-        public void onSuccess(UserRecordResult result) {
-
-        }
-    };
-
     @Override
     public void initialize(SinkTaskContext context) {
         sinkTaskContext = context;
@@ -158,9 +140,10 @@ public class AmazonKinesisSinkTask extends SinkTask {
             else
                 f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
-            Futures.addCallback(f, callback, MoreExecutors.directExecutor());
-            submittedFutures.add(f);
             f.addListener(() -> atLeastOneWritten.countDown(), MoreExecutors.directExecutor());
+            //
+            //Futures.addCallback(f, callback, MoreExecutors.directExecutor());
+            submittedFutures.add(f);
         }
         try {
             try {
@@ -173,6 +156,12 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 waitingFuture.get().get();
             }
         } catch (ExecutionException|InterruptedException ex) {
+            if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
+                Attempt last = Iterables.getLast(((UserRecordFailedException) ex.getCause()).getResult().getAttempts());
+                throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
+                        + last.getErrorMessage());
+
+            }
             throw new ConnectException("Producer failed" + ex.getMessage(), ex);
         }
     }
