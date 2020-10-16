@@ -141,8 +141,6 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
             f.addListener(() -> atLeastOneWritten.countDown(), MoreExecutors.directExecutor());
-            //
-            //Futures.addCallback(f, callback, MoreExecutors.directExecutor());
             submittedFutures.add(f);
         }
         try {
