@@ -3,11 +3,14 @@ package com.amazon.kinesis.kafka;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import com.amazonaws.util.StringUtils;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
@@ -22,6 +25,8 @@ import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class AmazonKinesisSinkTask extends SinkTask {
 
@@ -74,6 +79,8 @@ public class AmazonKinesisSinkTask extends SinkTask {
 	private Map<String, KinesisProducer> producerMap = new HashMap<String, KinesisProducer>();
 
 	private KinesisProducer kinesisProducer;
+
+	private static final Logger log = LoggerFactory.getLogger(AmazonKinesisSinkTask.class);
 
 	final FutureCallback<UserRecordResult> callback = new FutureCallback<UserRecordResult>() {
 		@Override
@@ -129,6 +136,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 		// or misconfigured shards we will pause consumption of messages till
 		// backlog is cleared
 
+		CountDownLatch atLeastOneWritten = new CountDownLatch(sinkRecords.size() > 0 ? 1 : 0);
 		validateOutStandingRecords();
 
 		String partitionKey;
@@ -149,7 +157,12 @@ public class AmazonKinesisSinkTask extends SinkTask {
 				f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
 			Futures.addCallback(f, callback, MoreExecutors.directExecutor());
-
+			f.addListener(() -> atLeastOneWritten.countDown(), MoreExecutors.directExecutor());
+		}
+		try {
+			atLeastOneWritten.await(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+		} catch (InterruptedException e) {
+			throw new ConnectException("Interrupted waiting for first result", e);
 		}
 	}
 
@@ -173,13 +186,12 @@ public class AmazonKinesisSinkTask extends SinkTask {
 								// notify/log that Kinesis Producers have
 								// buffered values
 								// but are not being sent
-								System.out.println(
+								log.error(
 										"Kafka Consumption has been stopped because Kinesis Producers has buffered messages above threshold");
 								sleepCount = 0;
 							}
 						} catch (InterruptedException e) {
-							// TODO Auto-generated catch block
-							e.printStackTrace();
+						    throw new ConnectException("Unable to publish records", e);
 						}
 					}
 					if (pause)
@@ -203,13 +215,12 @@ public class AmazonKinesisSinkTask extends SinkTask {
 							// notify/log that Kinesis Producers have buffered
 							// values
 							// but are not being sent
-							System.out.println(
+							log.error(
 									"Kafka Consumption has been stopped because Kinesis Producers has buffered messages above threshold");
 							sleepCount = 0;
 						}
 					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						throw new ConnectException("Unable to publish records", e);
 					}
 				}
 				if (pause)
