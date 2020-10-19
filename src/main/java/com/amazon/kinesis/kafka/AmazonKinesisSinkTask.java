@@ -174,7 +174,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
     private void throwErrorFromAttempts(UserRecordResult result) {
         Attempt last = Iterables.getLast(
-                Iterables.filter(result.getAttempts(), r -> r.getErrorCode() != "Expired-Record"), // first not expired
+                Iterables.filter(result.getAttempts(), r -> !"Expired".equals(r.getErrorCode())), // first not expired
                 Iterables.getLast(result.getAttempts())); // real error
         throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
                 + last.getErrorMessage());
