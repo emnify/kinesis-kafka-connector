@@ -117,7 +117,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         // backlog is cleared
 
         CountDownLatch atLeastOneWritten = new CountDownLatch(sinkRecords.size() > 0 ? 1 : 0);
-        List<Future> submittedFutures = new ArrayList<>();
+        List<ListenableFuture<UserRecordResult>> submittedFutures = new ArrayList<>();
         validateOutStandingRecords();
 
         String partitionKey;
@@ -146,7 +146,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         waitForAtLeastOne(atLeastOneWritten, submittedFutures);
     }
 
-    private void waitForAtLeastOne(CountDownLatch atLeastOneWritten, List<Future> submittedFutures) {
+    private void waitForAtLeastOne(CountDownLatch atLeastOneWritten, List<ListenableFuture<UserRecordResult>> submittedFutures) {
         try {
             try {
                 atLeastOneWritten.await(this.maxBufferedTime, TimeUnit.MILLISECONDS);
@@ -154,22 +154,30 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 log.error("Interrupted waiting for the first result");
                 throw new ConnectException("Interrupted waiting for first result", e);
             }
-            Optional<Future> waitingFuture = submittedFutures.stream().filter(f -> f.isDone()).findAny();
+            Optional<ListenableFuture<UserRecordResult>> waitingFuture =
+                    submittedFutures.stream().filter(f -> f.isDone()).findAny();
             if (waitingFuture.isPresent()) {
-                waitingFuture.get().get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+                UserRecordResult result = waitingFuture.get().get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+                if (!result.isSuccessful()) {
+                    throwErrorFromAttempts(result);
+                }
             }
         } catch (ExecutionException|InterruptedException ex) {
             if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
-                Attempt last = Iterables.getLast(((UserRecordFailedException) ex.getCause()).getResult().getAttempts());
-                log.error("Error attempted!");
-                throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
-                        + last.getErrorMessage());
-
+                throwErrorFromAttempts(((UserRecordFailedException)ex.getCause()).getResult());
             }
             throw new ConnectException("Producer failed" + ex.getMessage(), ex);
         } catch (TimeoutException ex) {
             throw new ConnectException("Kinesis Producer failed to publish data in a reasonable time interval and timed out.");
         }
+    }
+
+    private void throwErrorFromAttempts(UserRecordResult result) {
+        Attempt last = Iterables.getLast(result.getAttempts());
+        log.error("Error attempted!");
+        throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
+                + last.getErrorMessage());
+
     }
 
     private boolean validateOutStandingRecords() {
