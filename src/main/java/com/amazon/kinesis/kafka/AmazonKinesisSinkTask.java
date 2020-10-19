@@ -1,10 +1,7 @@
 package com.amazon.kinesis.kafka;
 
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import com.amazonaws.util.StringUtils;
@@ -140,27 +137,38 @@ public class AmazonKinesisSinkTask extends SinkTask {
             else
                 f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
-            f.addListener(() -> atLeastOneWritten.countDown(), MoreExecutors.directExecutor());
+            f.addListener(() -> {
+                log.info("At least one written now!");
+                atLeastOneWritten.countDown();
+            }, MoreExecutors.directExecutor());
             submittedFutures.add(f);
         }
+        waitForAtLeastOne(atLeastOneWritten, submittedFutures);
+    }
+
+    private void waitForAtLeastOne(CountDownLatch atLeastOneWritten, List<Future> submittedFutures) {
         try {
             try {
                 atLeastOneWritten.await(this.maxBufferedTime, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
+                log.error("Interrupted waiting for the first result");
                 throw new ConnectException("Interrupted waiting for first result", e);
             }
             Optional<Future> waitingFuture = submittedFutures.stream().filter(f -> f.isDone()).findAny();
             if (waitingFuture.isPresent()) {
-                waitingFuture.get().get();
+                waitingFuture.get().get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
             }
         } catch (ExecutionException|InterruptedException ex) {
             if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
                 Attempt last = Iterables.getLast(((UserRecordFailedException) ex.getCause()).getResult().getAttempts());
+                log.error("Error attempted!");
                 throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
                         + last.getErrorMessage());
 
             }
             throw new ConnectException("Producer failed" + ex.getMessage(), ex);
+        } catch (TimeoutException ex) {
+            throw new ConnectException("Kinesis Producer failed to publish data in a reasonable time interval and timed out.");
         }
     }
 
