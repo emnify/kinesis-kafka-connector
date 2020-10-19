@@ -149,7 +149,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
     private void waitForAtLeastOne(CountDownLatch atLeastOneWritten, List<ListenableFuture<UserRecordResult>> submittedFutures) {
         try {
             try {
-                atLeastOneWritten.await(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+                atLeastOneWritten.await(this.ttl, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 log.error("Interrupted waiting for the first result");
                 throw new ConnectException("Interrupted waiting for first result", e);
@@ -158,7 +158,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 log.info("No submitted futures found");
             } else {
                 ListenableFuture<UserRecordResult> waitingFuture = submittedFutures.iterator().next();
-                UserRecordResult result = waitingFuture.get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+                UserRecordResult result = waitingFuture.get(this.maxBufferedTime + this.ttl, TimeUnit.MILLISECONDS);
                 if (!result.isSuccessful()) {
                     throwErrorFromAttempts(result);
                 }
