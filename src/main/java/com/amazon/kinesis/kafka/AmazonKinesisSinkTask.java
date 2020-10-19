@@ -161,6 +161,8 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 if (!result.isSuccessful()) {
                     throwErrorFromAttempts(result);
                 }
+            } else {
+                throw new ConnectException("No result returned!");
             }
         } catch (ExecutionException|InterruptedException ex) {
             if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
