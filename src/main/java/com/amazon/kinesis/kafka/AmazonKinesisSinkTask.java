@@ -155,7 +155,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 throw new ConnectException("Interrupted waiting for first result", e);
             }
             Optional<ListenableFuture<UserRecordResult>> waitingFuture =
-                    submittedFutures.stream().filter(f -> f.isDone()).findAny();
+                    submittedFutures.stream().findAny();
             if (waitingFuture.isPresent()) {
                 UserRecordResult result = waitingFuture.get().get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
                 if (!result.isSuccessful()) {
