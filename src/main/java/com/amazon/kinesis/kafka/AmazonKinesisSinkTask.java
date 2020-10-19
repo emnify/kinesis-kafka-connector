@@ -1,10 +1,7 @@
 package com.amazon.kinesis.kafka;
 
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import com.amazonaws.util.StringUtils;
@@ -83,24 +80,6 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
     private static final Logger log = LoggerFactory.getLogger(AmazonKinesisSinkTask.class);
 
-    final FutureCallback<UserRecordResult> callback = new FutureCallback<UserRecordResult>() {
-        @Override
-        public void onFailure(Throwable t) {
-            if (t instanceof UserRecordFailedException) {
-                Attempt last = Iterables.getLast(((UserRecordFailedException) t).getResult().getAttempts());
-                throw new DataException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
-                        + last.getErrorMessage());
-
-            }
-            throw new DataException("Exception during Kinesis put", t);
-        }
-
-        @Override
-        public void onSuccess(UserRecordResult result) {
-
-        }
-    };
-
     @Override
     public void initialize(SinkTaskContext context) {
         sinkTaskContext = context;
@@ -138,7 +117,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         // backlog is cleared
 
         CountDownLatch atLeastOneWritten = new CountDownLatch(sinkRecords.size() > 0 ? 1 : 0);
-        List<Future> submittedFutures = new ArrayList<>();
+        List<ListenableFuture<UserRecordResult>> submittedFutures = new ArrayList<>();
         validateOutStandingRecords();
 
         String partitionKey;
@@ -158,23 +137,48 @@ public class AmazonKinesisSinkTask extends SinkTask {
             else
                 f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
-            Futures.addCallback(f, callback, MoreExecutors.directExecutor());
+            f.addListener(() -> {
+                atLeastOneWritten.countDown();
+            }, MoreExecutors.directExecutor());
             submittedFutures.add(f);
-            f.addListener(() -> atLeastOneWritten.countDown(), MoreExecutors.directExecutor());
         }
+        waitForAtLeastOne(atLeastOneWritten, submittedFutures);
+    }
+
+    private void waitForAtLeastOne(CountDownLatch atLeastOneWritten, List<ListenableFuture<UserRecordResult>> submittedFutures) {
         try {
             try {
-                atLeastOneWritten.await(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+                atLeastOneWritten.await(this.ttl, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
+                log.error("Interrupted waiting for the first result");
                 throw new ConnectException("Interrupted waiting for first result", e);
             }
-            Optional<Future> waitingFuture = submittedFutures.stream().filter(f -> f.isDone()).findAny();
-            if (waitingFuture.isPresent()) {
-                waitingFuture.get().get();
+            if (submittedFutures.isEmpty()) {
+                log.info("No submitted futures found");
+            } else {
+                ListenableFuture<UserRecordResult> waitingFuture = submittedFutures.iterator().next();
+                UserRecordResult result = waitingFuture.get(this.maxBufferedTime + this.ttl, TimeUnit.MILLISECONDS);
+                if (!result.isSuccessful()) {
+                    throwErrorFromAttempts(result);
+                }
             }
         } catch (ExecutionException|InterruptedException ex) {
+            if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
+                throwErrorFromAttempts(((UserRecordFailedException)ex.getCause()).getResult());
+            }
             throw new ConnectException("Producer failed" + ex.getMessage(), ex);
+        } catch (TimeoutException ex) {
+            throw new ConnectException("Kinesis Producer failed to publish data in a reasonable time interval and timed out.");
         }
+    }
+
+    private void throwErrorFromAttempts(UserRecordResult result) {
+        Attempt last = Iterables.getLast(
+                Iterables.filter(result.getAttempts(), r -> !"Expired".equals(r.getErrorCode())), // first not expired
+                Iterables.getLast(result.getAttempts())); // real error
+        throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
+                + last.getErrorMessage());
+
     }
 
     private boolean validateOutStandingRecords() {
