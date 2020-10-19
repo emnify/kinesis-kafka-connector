@@ -138,7 +138,6 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
             f.addListener(() -> {
-                log.info("At least one written now!");
                 atLeastOneWritten.countDown();
             }, MoreExecutors.directExecutor());
             submittedFutures.add(f);
@@ -174,8 +173,9 @@ public class AmazonKinesisSinkTask extends SinkTask {
     }
 
     private void throwErrorFromAttempts(UserRecordResult result) {
-        Attempt last = Iterables.getLast(result.getAttempts());
-        log.error("Error attempted!");
+        Attempt last = Iterables.getLast(
+                Iterables.filter(result.getAttempts(), r -> r.getErrorCode() != "Expired-Record"), // first not expired
+                Iterables.getLast(result.getAttempts())); // real error
         throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
                 + last.getErrorMessage());
 
