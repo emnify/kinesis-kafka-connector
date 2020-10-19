@@ -154,15 +154,14 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 log.error("Interrupted waiting for the first result");
                 throw new ConnectException("Interrupted waiting for first result", e);
             }
-            Optional<ListenableFuture<UserRecordResult>> waitingFuture =
-                    submittedFutures.stream().findAny();
-            if (waitingFuture.isPresent()) {
-                UserRecordResult result = waitingFuture.get().get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
+            if (submittedFutures.isEmpty()) {
+                log.info("No submitted futures found");
+            } else {
+                ListenableFuture<UserRecordResult> waitingFuture = submittedFutures.iterator().next();
+                UserRecordResult result = waitingFuture.get(this.maxBufferedTime, TimeUnit.MILLISECONDS);
                 if (!result.isSuccessful()) {
                     throwErrorFromAttempts(result);
                 }
-            } else {
-                throw new ConnectException("No result returned!");
             }
         } catch (ExecutionException|InterruptedException ex) {
             if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
