@@ -14,6 +14,8 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 
 	public static final String REGION = "region";
 
+	public static final String BASE_REGION = "baseRegion";
+
 	public static final String STREAM_NAME = "streamName";
 
 	public static final String MAX_BUFFERED_TIME = "maxBufferedTime";
@@ -48,6 +50,8 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 
 	public static final String ROLE_ARN = "roleARN";
 
+	public static final String BASE_ROLE_ARN = "baseRoleARN";
+
 	public static final String ROLE_SESSION_NAME = "roleSessionName";
 
 	public static final String ROLE_EXTERNAL_ID = "roleExternalID";
@@ -58,9 +62,13 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 
 	private String region;
 
+	private String baseRegion;
+
 	private String streamName;
 
 	private String roleARN;
+
+	private String baseRoleARN;
 
 	private String roleSessionName;
 
@@ -103,7 +111,9 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 	@Override
 	public void start(Map<String, String> props) {
 		region = props.get(REGION);
+		baseRegion = props.get(BASE_REGION);
 		streamName = props.get(STREAM_NAME);
+		baseRoleARN = props.get(BASE_ROLE_ARN);
 		roleARN = props.get(ROLE_ARN);
 		roleSessionName = props.get(ROLE_SESSION_NAME);
 		roleExternalID = props.get(ROLE_EXTERNAL_ID);
@@ -148,8 +158,14 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 			if (region != null)
 				config.put(REGION, region);
 
+			if (baseRegion != null)
+				config.put(BASE_REGION, baseRegion);
+
 			if (roleARN != null)
 				config.put(ROLE_ARN, roleARN);
+
+			if (baseRoleARN != null)
+				config.put(BASE_ROLE_ARN, baseRoleARN);
 
 			if (roleSessionName != null)
 				config.put(ROLE_SESSION_NAME, roleSessionName);

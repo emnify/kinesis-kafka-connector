@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -25,6 +25,8 @@ import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.amazonaws.util.StringUtils;
+
+import java.util.Optional;
 
 /**
  * IAMUtility offers convenience functions for creating AWS IAM credential providers.
@@ -47,13 +49,15 @@ public class IAMUtility {
      * @param roleDurationSeconds Duration of the STS assume-role session (auto-renewed on expiration).
      * @return AWS credentials provider
      */
-    static AWSCredentialsProvider createCredentials(String regionName, String roleARN, String roleExternalID, String roleSessionName, int roleDurationSeconds) {
+    static AWSCredentialsProvider createCredentials(String regionName, String roleARN, String roleExternalID,
+                                                    String roleSessionName, int roleDurationSeconds, Optional<AWSCredentialsProvider> baseProvider) {
+        AWSCredentialsProvider previousProvider = baseProvider.orElse(new DefaultAWSCredentialsProviderChain());
         if (StringUtils.isNullOrEmpty(roleARN))
-            return new DefaultAWSCredentialsProviderChain();
+            return previousProvider;
 
         // Use STS to assume a role if one was given
         final AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.standard()
-                .withCredentials(new DefaultAWSCredentialsProviderChain())
+                .withCredentials(previousProvider)
                 .withRegion(regionName)
                 .build();
 

@@ -2,14 +2,14 @@ package com.amazon.kinesis.kafka;
 
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
+import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.util.StringUtils;
 import com.google.common.util.concurrent.MoreExecutors;
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
@@ -20,8 +20,6 @@ import com.amazonaws.services.kinesis.producer.KinesisProducerConfiguration;
 import com.amazonaws.services.kinesis.producer.UserRecordFailedException;
 import com.amazonaws.services.kinesis.producer.UserRecordResult;
 import com.google.common.collect.Iterables;
-import com.google.common.util.concurrent.FutureCallback;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +31,10 @@ public class AmazonKinesisSinkTask extends SinkTask {
     private String regionName;
 
     private String roleARN;
+
+    private String baseRegionName;
+
+    private String baseRoleARN;
 
     private String roleExternalID;
 
@@ -279,6 +281,10 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
         roleARN = props.get(AmazonKinesisSinkConnector.ROLE_ARN);
 
+        baseRegionName = props.get(AmazonKinesisSinkConnector.BASE_REGION);
+
+        baseRoleARN = props.get(AmazonKinesisSinkConnector.BASE_ROLE_ARN);
+
         roleSessionName = props.get(AmazonKinesisSinkConnector.ROLE_SESSION_NAME);
 
         roleDurationSeconds = Integer.parseInt(props.get(AmazonKinesisSinkConnector.ROLE_DURATION_SECONDS));
@@ -350,7 +356,9 @@ public class AmazonKinesisSinkTask extends SinkTask {
     private KinesisProducer getKinesisProducer() {
         KinesisProducerConfiguration config = new KinesisProducerConfiguration();
         config.setRegion(regionName);
-        config.setCredentialsProvider(IAMUtility.createCredentials(regionName, roleARN, roleExternalID, roleSessionName, roleDurationSeconds));
+        AWSCredentialsProvider baseProvider = IAMUtility.createCredentials(baseRegionName, baseRoleARN, null,
+                RandomStringUtils.randomAlphanumeric(10), roleDurationSeconds, Optional.empty());
+        config.setCredentialsProvider(IAMUtility.createCredentials(regionName, roleARN, roleExternalID, roleSessionName, roleDurationSeconds, Optional.of(baseProvider)));
         config.setMaxConnections(maxConnections);
         if (!StringUtils.isNullOrEmpty(kinesisEndpoint))
             config.setKinesisEndpoint(kinesisEndpoint);

@@ -1,9 +1,6 @@
 package com.amazon.kinesis.kafka;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import com.amazonaws.util.StringUtils;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -88,7 +85,7 @@ public class FirehoseSinkTask extends SinkTask {
 
 		kinesisEndpoint = props.get(FirehoseSinkConnector.KINESIS_ENDPOINT);
 
-		firehoseClient = new AmazonKinesisFirehoseClient(IAMUtility.createCredentials(props.get(FirehoseSinkConnector.REGION), roleARN, roleExternalID, roleSessionName, roleDurationSeconds));
+		firehoseClient = new AmazonKinesisFirehoseClient(IAMUtility.createCredentials(props.get(FirehoseSinkConnector.REGION), roleARN, roleExternalID, roleSessionName, roleDurationSeconds, Optional.empty()));
 
 		firehoseClient.setRegion(RegionUtils.getRegion(props.get(FirehoseSinkConnector.REGION)));
 
