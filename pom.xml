@@ -4,7 +4,7 @@
 
 	<groupId>com.amazonaws</groupId>
 	<artifactId>amazon-kinesis-kafka-connector</artifactId>
-	<version>0.0.10-SNAPSHOT</version>
+	<version>0.0.10-EMNIFY</version>
 	<packaging>jar</packaging>
 
 	<name>amazon-kinesis-kafka-connector</name>
