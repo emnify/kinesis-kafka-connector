@@ -358,7 +358,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         config.setRegion(regionName);
         AWSCredentialsProvider baseProvider = IAMUtility.createCredentials(baseRegionName, baseRoleARN, null,
                 RandomStringUtils.randomAlphanumeric(10), roleDurationSeconds, Optional.empty());
-        AWSCredentialsProvider provider = IAMUtility.createCredentials(regionName, roleARN, roleExternalID, roleSessionName, roleDurationSeconds, Optional.of(baseProvider))
+        AWSCredentialsProvider provider = IAMUtility.createCredentials(regionName, roleARN, roleExternalID, roleSessionName, roleDurationSeconds, Optional.of(baseProvider));
         // verify that we can get credentials
         provider.getCredentials();
         config.setCredentialsProvider(provider);
