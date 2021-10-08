@@ -344,11 +344,15 @@ public class AmazonKinesisSinkTask extends SinkTask {
         // destroying kinesis producers which were not closed as part of close
         if (singleKinesisProducerPerPartition) {
             for (KinesisProducer kp : producerMap.values()) {
-                kp.flushSync();
-                kp.destroy();
+                if (kp != null) {
+                    kp.flushSync();
+                    kp.destroy();
+                }
             }
         } else {
-            kinesisProducer.destroy();
+            if (kinesisProducer != null) {
+                kinesisProducer.destroy();
+            }
         }
 
     }
