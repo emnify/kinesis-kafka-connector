@@ -1,17 +1,14 @@
 package com.amazon.kinesis.kafka;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.nio.Buffer;
 import java.util.LinkedList;
 import java.util.List;
 
-import com.amazonaws.services.kinesisfirehose.model.Record;
 import org.apache.kafka.connect.data.*;
-import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.errors.DataException;
-import org.apache.kafka.connect.sink.SinkRecord;
 
 public class DataUtility {
 
@@ -58,15 +55,16 @@ public class DataUtility {
 			boolBuffer.put((byte) ((Boolean) value ? 1 : 0));
 			return boolBuffer;
 		case STRING:
-			try {
-				return ByteBuffer.wrap(((String) value).getBytes("UTF-8"));
-			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
-				System.out.println("Message cannot be translated:" + e.getLocalizedMessage());
+            return ByteBuffer.wrap(((String) value).getBytes(StandardCharsets.UTF_8));
+		case BYTES:
+			if (value instanceof byte[]) {
+				return ByteBuffer.wrap((byte[]) value);
+			} else if (value instanceof ByteBuffer) {
+				return (ByteBuffer) value;
 			}
 		case ARRAY:
 			Schema sch = schema.valueSchema();
-			if (sch.type() == Type.MAP || sch.type() == Type.STRUCT) {
+			if (sch.type() == Schema.Type.MAP || sch.type() == Schema.Type.STRUCT) {
 				throw new DataException("Invalid schema type.");
 			}
 			Object[] objs = (Object[]) value;
@@ -80,26 +78,16 @@ public class DataUtility {
 			ByteBuffer result = ByteBuffer.allocate(Arrays.stream(byteBuffers).mapToInt(Buffer::remaining).sum());
 			Arrays.stream(byteBuffers).forEach(bb -> result.put(bb.duplicate()));
 			return result;
-		case BYTES:
-			if (value instanceof byte[])
-				return ByteBuffer.wrap((byte[]) value);
-			else if (value instanceof ByteBuffer)
-				return (ByteBuffer) value;
-		case MAP:
-			// TO BE IMPLEMENTED
-			return ByteBuffer.wrap(null);
-		case STRUCT:
+  	    case STRUCT:
+		   List<ByteBuffer> fieldList = new LinkedList<ByteBuffer>();
+		   // Parsing each field of structure
+		   schema.fields().forEach(field -> fieldList.add(parseValue(field.schema(), ((Struct) value).get(field))));
+		   // Initialize ByteBuffer
+		   ByteBuffer processedValue = ByteBuffer.allocate(fieldList.stream().mapToInt(Buffer::remaining).sum());
+		   // Combine bytebuffer of all fields
+		   fieldList.forEach(buffer -> processedValue.put(buffer.duplicate()));
 
-			List<ByteBuffer> fieldList = new LinkedList<ByteBuffer>();
-			// Parsing each field of structure
-			schema.fields().forEach(field -> fieldList.add(parseValue(field.schema(), ((Struct) value).get(field))));
-			// Initialize ByteBuffer
-			ByteBuffer processedValue = ByteBuffer.allocate(fieldList.stream().mapToInt(Buffer::remaining).sum());
-			// Combine bytebuffer of all fields
-			fieldList.forEach(buffer -> processedValue.put(buffer.duplicate()));
-
-			return processedValue;
-
+		   return processedValue;
 		}
 		return null;
 	}
@@ -122,17 +110,6 @@ public class DataUtility {
 				// return value by default. Schema name can have various names
 				return value;
 		}
-	}
-
-	/**
-	 * Converts Kafka record into Kinesis record
-	 * 
-	 * @param sinkRecord
-	 *            Kafka unit of message
-	 * @return Kinesis unit of message
-	 */
-	public static Record createRecord(SinkRecord sinkRecord) {
-		return new Record().withData(parseValue(sinkRecord.valueSchema(), sinkRecord.value()));
 	}
 
 }

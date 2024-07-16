@@ -58,7 +58,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
     private String metricsNameSpace;
 
-    private boolean aggregration;
+    private boolean aggregation;
 
     private boolean usePartitionAsHashKey;
 
@@ -76,7 +76,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
     private SinkTaskContext sinkTaskContext;
 
-    private Map<String, KinesisProducer> producerMap = new HashMap<String, KinesisProducer>();
+    private final Map<String, KinesisProducer> producerMap = new HashMap<String, KinesisProducer>();
 
     private KinesisProducer kinesisProducer;
 
@@ -118,7 +118,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         // or misconfigured shards we will pause consumption of messages till
         // backlog is cleared
 
-        CountDownLatch atLeastOneWritten = new CountDownLatch(sinkRecords.size() > 0 ? 1 : 0);
+        CountDownLatch atLeastOneWritten = new CountDownLatch(!sinkRecords.isEmpty() ? 1 : 0);
         List<ListenableFuture<UserRecordResult>> submittedFutures = new ArrayList<>();
         validateOutStandingRecords();
 
@@ -127,7 +127,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
             ListenableFuture<UserRecordResult> f;
             // Kinesis does not allow empty partition key
-            if (sinkRecord.key() != null && !sinkRecord.key().toString().trim().equals("")) {
+            if (sinkRecord.key() != null && !sinkRecord.key().toString().trim().isEmpty()) {
                 partitionKey = sinkRecord.key().toString().trim();
             } else {
                 partitionKey = Integer.toString(sinkRecord.kafkaPartition());
@@ -139,9 +139,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
             else
                 f = addUserRecord(kinesisProducer, streamName, partitionKey, usePartitionAsHashKey, sinkRecord);
 
-            f.addListener(() -> {
-                atLeastOneWritten.countDown();
-            }, MoreExecutors.directExecutor());
+            f.addListener(atLeastOneWritten::countDown, MoreExecutors.directExecutor());
             submittedFutures.add(f);
         }
         waitForAtLeastOne(atLeastOneWritten, submittedFutures);
@@ -183,7 +181,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
     }
 
-    private boolean validateOutStandingRecords() {
+    private void validateOutStandingRecords() {
         if (pauseConsumption) {
             if (singleKinesisProducerPerPartition) {
                 producerMap.values().forEach(producer -> {
@@ -214,7 +212,6 @@ public class AmazonKinesisSinkTask extends SinkTask {
                     if (pause)
                         sinkTaskContext.resume((TopicPartition[]) sinkTaskContext.assignment().toArray());
                 });
-                return true;
             } else {
                 int sleepCount = 0;
                 boolean pause = false;
@@ -242,10 +239,8 @@ public class AmazonKinesisSinkTask extends SinkTask {
                 }
                 if (pause)
                     sinkTaskContext.resume((TopicPartition[]) sinkTaskContext.assignment().toArray());
-                return true;
             }
         } else {
-            return true;
         }
     }
 
@@ -299,7 +294,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
 
         metricsNameSpace = props.get(AmazonKinesisSinkConnector.METRICS_NAMESPACE);
 
-        aggregration = Boolean.parseBoolean(props.get(AmazonKinesisSinkConnector.AGGREGRATION_ENABLED));
+        aggregation = Boolean.parseBoolean(props.get(AmazonKinesisSinkConnector.AGGREGATION_ENABLED));
 
         usePartitionAsHashKey = Boolean.parseBoolean(props.get(AmazonKinesisSinkConnector.USE_PARTITION_AS_HASH_KEY));
 
@@ -370,7 +365,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         if (!StringUtils.isNullOrEmpty(kinesisEndpoint))
             config.setKinesisEndpoint(kinesisEndpoint);
 
-        config.setAggregationEnabled(aggregration);
+        config.setAggregationEnabled(aggregation);
 
         // Limits the maximum allowed put rate for a shard, as a percentage of
         // the
