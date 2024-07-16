@@ -2,8 +2,13 @@ package com.amazon.kinesis.kafka;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.nio.Buffer;
+import java.util.LinkedList;
+import java.util.List;
 
 import org.apache.kafka.connect.data.*;
+import org.apache.kafka.connect.errors.DataException;
 
 public class DataUtility {
 
@@ -51,7 +56,39 @@ public class DataUtility {
 			return boolBuffer;
 		case STRING:
             return ByteBuffer.wrap(((String) value).getBytes(StandardCharsets.UTF_8));
-        }
+		case BYTES:
+			if (value instanceof byte[]) {
+				return ByteBuffer.wrap((byte[]) value);
+			} else if (value instanceof ByteBuffer) {
+				return (ByteBuffer) value;
+			}
+		case ARRAY:
+			Schema sch = schema.valueSchema();
+			if (sch.type() == Schema.Type.MAP || sch.type() == Schema.Type.STRUCT) {
+				throw new DataException("Invalid schema type.");
+			}
+			Object[] objs = (Object[]) value;
+			ByteBuffer[] byteBuffers = new ByteBuffer[objs.length];
+			int noOfByteBuffer = 0;
+
+			for (Object obj : objs) {
+				byteBuffers[noOfByteBuffer++] = parseValue(sch, obj);
+			}
+
+			ByteBuffer result = ByteBuffer.allocate(Arrays.stream(byteBuffers).mapToInt(Buffer::remaining).sum());
+			Arrays.stream(byteBuffers).forEach(bb -> result.put(bb.duplicate()));
+			return result;
+  	    case STRUCT:
+		   List<ByteBuffer> fieldList = new LinkedList<ByteBuffer>();
+		   // Parsing each field of structure
+		   schema.fields().forEach(field -> fieldList.add(parseValue(field.schema(), ((Struct) value).get(field))));
+		   // Initialize ByteBuffer
+		   ByteBuffer processedValue = ByteBuffer.allocate(fieldList.stream().mapToInt(Buffer::remaining).sum());
+		   // Combine bytebuffer of all fields
+		   fieldList.forEach(buffer -> processedValue.put(buffer.duplicate()));
+
+		   return processedValue;
+		}
 		return null;
 	}
 

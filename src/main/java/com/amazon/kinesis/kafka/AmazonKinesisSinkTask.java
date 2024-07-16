@@ -365,7 +365,7 @@ public class AmazonKinesisSinkTask extends SinkTask {
         if (!StringUtils.isNullOrEmpty(kinesisEndpoint))
             config.setKinesisEndpoint(kinesisEndpoint);
 
-        config.setAggregationEnabled(aggregration);
+        config.setAggregationEnabled(aggregation);
 
         // Limits the maximum allowed put rate for a shard, as a percentage of
         // the
