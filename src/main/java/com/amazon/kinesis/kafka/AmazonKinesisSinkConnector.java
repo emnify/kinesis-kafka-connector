@@ -32,7 +32,7 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 
 	public static final String METRICS_NAMESPACE = "metricsNameSpace";
 
-	public static final String AGGREGRATION_ENABLED = "aggregration";
+	public static final String AGGREGATION_ENABLED = "aggregation";
 
 	public static final String USE_PARTITION_AS_HASH_KEY = "usePartitionAsHashKey";
 	
@@ -126,7 +126,7 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 		metricsLevel = props.get(METRICS_LEVEL);
 		metricsGranuality = props.get(METRICS_GRANUALITY);
 		metricsNameSpace = props.get(METRICS_NAMESPACE);
-		aggregration = props.get(AGGREGRATION_ENABLED);
+		aggregration = props.get(AGGREGATION_ENABLED);
 		usePartitionAsHashKey = props.get(USE_PARTITION_AS_HASH_KEY);
 		flushSync = props.get(FLUSH_SYNC);
 		singleKinesisProducerPerPartition = props.get(SINGLE_KINESIS_PRODUCER_PER_PARTITION);
@@ -218,9 +218,9 @@ public class AmazonKinesisSinkConnector extends SinkConnector {
 				config.put(METRICS_NAMESPACE, "KinesisProducer");
 
 			if (aggregration != null)
-				config.put(AGGREGRATION_ENABLED, aggregration);
+				config.put(AGGREGATION_ENABLED, aggregration);
 			else
-				config.put(AGGREGRATION_ENABLED, "false");
+				config.put(AGGREGATION_ENABLED, "false");
 
 			if (usePartitionAsHashKey != null)
 				config.put(USE_PARTITION_AS_HASH_KEY, usePartitionAsHashKey);
