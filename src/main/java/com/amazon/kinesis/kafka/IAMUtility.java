@@ -19,12 +19,12 @@
 
 package com.amazon.kinesis.kafka;
 
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
-import com.amazonaws.util.StringUtils;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
 import java.util.Optional;
 
@@ -49,24 +49,31 @@ public class IAMUtility {
      * @param roleDurationSeconds Duration of the STS assume-role session (auto-renewed on expiration).
      * @return AWS credentials provider
      */
-    static AWSCredentialsProvider createCredentials(String regionName, String roleARN, String roleExternalID,
-                                                    String roleSessionName, int roleDurationSeconds, Optional<AWSCredentialsProvider> baseProvider) {
-        AWSCredentialsProvider previousProvider = baseProvider.orElse(new DefaultAWSCredentialsProviderChain());
-        if (StringUtils.isNullOrEmpty(roleARN))
+    static AwsCredentialsProvider createCredentials(String regionName, String roleARN, String roleExternalID,
+                                                    String roleSessionName, int roleDurationSeconds, Optional<AwsCredentialsProvider> baseProvider) {
+        AwsCredentialsProvider previousProvider = baseProvider.orElse(DefaultCredentialsProvider.create());
+        if (roleARN == null || roleARN.isEmpty())
             return previousProvider;
 
         // Use STS to assume a role if one was given
-        final AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.standard()
-                .withCredentials(previousProvider)
-                .withRegion(regionName)
+        final StsClient stsClient = StsClient.builder()
+                .region(Region.of(regionName))
+                .credentialsProvider(previousProvider)
                 .build();
 
-        STSAssumeRoleSessionCredentialsProvider.Builder providerBuilder = new STSAssumeRoleSessionCredentialsProvider.Builder(roleARN, roleSessionName).withStsClient(stsClient);
-        if (!StringUtils.isNullOrEmpty(roleExternalID))
-            providerBuilder = providerBuilder.withExternalId(roleExternalID);
+        AssumeRoleRequest.Builder requestBuilder = AssumeRoleRequest.builder()
+                .roleArn(roleARN)
+                .roleSessionName(roleSessionName);
+        if (roleExternalID != null && !roleExternalID.isEmpty())
+            requestBuilder = requestBuilder.externalId(roleExternalID);
         if (roleDurationSeconds > 0)
-            providerBuilder = providerBuilder.withRoleSessionDurationSeconds(roleDurationSeconds);
+            requestBuilder = requestBuilder.durationSeconds(roleDurationSeconds);
 
-        return providerBuilder.build();
+        AssumeRoleRequest assumeRoleRequest = requestBuilder.build();
+
+        return StsAssumeRoleCredentialsProvider.builder()
+                .stsClient(stsClient)
+                .refreshRequest(assumeRoleRequest)
+                .build();
     }
 }

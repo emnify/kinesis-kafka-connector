@@ -3,10 +3,8 @@ package com.amazon.kinesis.kafka;
 import java.util.*;
 import java.util.concurrent.*;
 
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.util.StringUtils;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import com.google.common.util.concurrent.MoreExecutors;
-import org.apache.commons.lang.RandomStringUtils;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -14,11 +12,11 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 
-import com.amazonaws.services.kinesis.producer.Attempt;
-import com.amazonaws.services.kinesis.producer.KinesisProducer;
-import com.amazonaws.services.kinesis.producer.KinesisProducerConfiguration;
-import com.amazonaws.services.kinesis.producer.UserRecordFailedException;
-import com.amazonaws.services.kinesis.producer.UserRecordResult;
+import software.amazon.kinesis.producer.Attempt;
+import software.amazon.kinesis.producer.KinesisProducer;
+import software.amazon.kinesis.producer.KinesisProducerConfiguration;
+import software.amazon.kinesis.producer.UserRecordFailedException;
+import software.amazon.kinesis.producer.UserRecordResult;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.slf4j.Logger;
@@ -355,14 +353,14 @@ public class AmazonKinesisSinkTask extends SinkTask {
     private KinesisProducer getKinesisProducer() {
         KinesisProducerConfiguration config = new KinesisProducerConfiguration();
         config.setRegion(regionName);
-        AWSCredentialsProvider baseProvider = IAMUtility.createCredentials(baseRegionName, baseRoleARN, null,
-                RandomStringUtils.randomAlphanumeric(10), roleDurationSeconds, Optional.empty());
-        AWSCredentialsProvider provider = IAMUtility.createCredentials(regionName, roleARN, roleExternalID, roleSessionName, roleDurationSeconds, Optional.of(baseProvider));
+        AwsCredentialsProvider baseProvider = IAMUtility.createCredentials(baseRegionName, baseRoleARN, null,
+                UUID.randomUUID().toString().substring(0, 10), roleDurationSeconds, Optional.empty());
+        AwsCredentialsProvider provider = IAMUtility.createCredentials(regionName, roleARN, roleExternalID, roleSessionName, roleDurationSeconds, Optional.of(baseProvider));
         // verify that we can get credentials
-        provider.getCredentials();
+        provider.resolveCredentials();
         config.setCredentialsProvider(provider);
         config.setMaxConnections(maxConnections);
-        if (!StringUtils.isNullOrEmpty(kinesisEndpoint))
+        if (kinesisEndpoint != null && !kinesisEndpoint.isEmpty())
             config.setKinesisEndpoint(kinesisEndpoint);
 
         config.setAggregationEnabled(aggregation);
