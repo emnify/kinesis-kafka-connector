@@ -1,5 +1,6 @@
 package com.amazon.kinesis.kafka;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -8,6 +9,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.apache.kafka.connect.sink.SinkTaskContext;
@@ -143,6 +145,8 @@ public class AmazonKinesisSinkTask extends SinkTask {
         waitForAtLeastOne(atLeastOneWritten, submittedFutures);
     }
 
+    private static final Set<String> RETRIABLE_ERROR_CODES = Set.of("InternalFailure", "ServiceUnavailable");
+
     private void waitForAtLeastOne(CountDownLatch atLeastOneWritten, List<ListenableFuture<UserRecordResult>> submittedFutures) {
         try {
             try {
@@ -164,9 +168,12 @@ public class AmazonKinesisSinkTask extends SinkTask {
             if (ex.getCause() != null && ex.getCause() instanceof UserRecordFailedException) {
                 throwErrorFromAttempts(((UserRecordFailedException)ex.getCause()).getResult());
             }
+            if (ex.getCause() instanceof IOException) {
+                throw new RetriableException("Network error communicating with Kinesis: " + ex.getMessage(), ex);
+            }
             throw new ConnectException("Producer failed" + ex.getMessage(), ex);
         } catch (TimeoutException ex) {
-            throw new ConnectException("Kinesis Producer failed to publish data in a reasonable time interval and timed out.");
+            throw new RetriableException("Kinesis Producer failed to publish data in a reasonable time interval and timed out.");
         }
     }
 
@@ -174,9 +181,11 @@ public class AmazonKinesisSinkTask extends SinkTask {
         Attempt last = Iterables.getLast(
                 Iterables.filter(result.getAttempts(), r -> !"Expired".equals(r.getErrorCode())), // first not expired
                 Iterables.getLast(result.getAttempts())); // real error
-        throw new ConnectException("Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-"
-                + last.getErrorMessage());
-
+        String message = "Kinesis Producer was not able to publish data - " + last.getErrorCode() + "-" + last.getErrorMessage();
+        if (RETRIABLE_ERROR_CODES.contains(last.getErrorCode())) {
+            throw new RetriableException(message);
+        }
+        throw new ConnectException(message);
     }
 
     private void validateOutStandingRecords() {
